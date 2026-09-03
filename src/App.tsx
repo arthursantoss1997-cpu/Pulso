@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { handleAuthCallback, getUser, login, logout } from '@netlify/identity'
+import { acceptInvite, handleAuthCallback, getUser, login, logout } from '@netlify/identity'
 import { ArrowLeft, BarChart3, Calculator, CalendarDays, ChevronRight, CircleDollarSign, Layers3, LoaderCircle, LogOut, Menu, Plus, Settings2, Target, X } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { demoDashboard, demoProduct } from './data/demo'
@@ -35,6 +35,21 @@ function Login({ onLogin }: { onLogin: () => Promise<void> }) {
     try { await login(email, password); await onLogin() } catch { setError('Não foi possível entrar. Confirme seu convite e suas credenciais.') } finally { setLoading(false) }
   }
   return <main className="login-page"><section className="login-card"><Brand /><div><h1>Seu painel de operação.</h1><p>Entre para acompanhar tráfego, vendas e lucro das suas ofertas.</p></div><form onSubmit={submit}><label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required /></label><label>Senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label>{error && <p className="form-error">{error}</p>}<button className="button primary" disabled={loading}>{loading ? 'Entrando...' : 'Entrar no painel'}</button></form><small>Acesso restrito a administradores convidados.</small></section></main>
+}
+
+function AcceptInvite({ token, onAccepted }: { token: string; onAccepted: () => Promise<void> }) {
+  const [password, setPassword] = useState('')
+  const [confirmation, setConfirmation] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); setError('')
+    if (password.length < 8) { setError('Use uma senha com pelo menos 8 caracteres.'); return }
+    if (password !== confirmation) { setError('As senhas não são iguais.'); return }
+    setLoading(true)
+    try { await acceptInvite(token, password); await onAccepted() } catch { setError('Não foi possível criar sua senha. Abra novamente o convite recebido por e-mail.') } finally { setLoading(false) }
+  }
+  return <main className="login-page"><section className="login-card"><Brand /><div><h1>Crie sua senha.</h1><p>Este será o acesso seguro ao seu painel Pulso.</p></div><form onSubmit={submit}><label>Nova senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" minLength={8} required /></label><label>Repita a senha<input type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="new-password" minLength={8} required /></label>{error && <p className="form-error">{error}</p>}<button className="button primary" disabled={loading}>{loading ? 'Criando acesso...' : 'Criar acesso ao painel'}</button></form><small>Guarde esta senha: ela será usada sempre que entrar.</small></section></main>
 }
 
 function AdminSheet({ products, onClose, onSaved }: { products: ProductMetric[]; onClose: () => void; onSaved: () => void }) {
@@ -97,6 +112,7 @@ function Sidebar({ current, onHome, onEconomics, onSettings, onLogout, open, set
 export default function App() {
   const [userReady, setUserReady] = useState(demoMode)
   const [authenticated, setAuthenticated] = useState(demoMode)
+  const [inviteToken, setInviteToken] = useState<string | null>(null)
   const [date, setDate] = useState(today)
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null)
@@ -107,7 +123,17 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [economicsOpen, setEconomicsOpen] = useState(false)
 
-  const refreshIdentity = async () => { await handleAuthCallback(); const user = await getUser(); setAuthenticated(Boolean(user)); setUserReady(true) }
+  const refreshIdentity = async () => {
+    const callback = await handleAuthCallback()
+    if (callback?.type === 'invite') {
+      setInviteToken(callback.token)
+      setAuthenticated(false)
+    } else {
+      const user = await getUser()
+      setAuthenticated(Boolean(user))
+    }
+    setUserReady(true)
+  }
   useEffect(() => { if (!demoMode) void refreshIdentity() }, [])
   const loadDashboard = async () => {
     setLoading(true); setError('')
@@ -120,6 +146,7 @@ export default function App() {
   useDashboardTools(dashboard, openProduct)
 
   if (!userReady) return <div className="loading-screen"><LoaderCircle className="spin"/> Carregando acesso seguro…</div>
+  if (inviteToken) return <AcceptInvite token={inviteToken} onAccepted={async () => { setInviteToken(null); await refreshIdentity() }} />
   if (!authenticated) return <Login onLogin={refreshIdentity} />
   const current = economicsOpen ? 'economics' : selectedProduct ? 'product' : 'dashboard'
   return <div className="app-shell"><Sidebar current={current} onHome={() => { setSelectedProduct(null); setEconomicsOpen(false) }} onEconomics={() => { setSelectedProduct(null); setEconomicsOpen(true) }} onSettings={() => setSettingsOpen(true)} onLogout={() => void exit()} open={menuOpen} setOpen={setMenuOpen}/>{demoMode && <div className="demo-badge">Modo demonstrativo</div>}<div className="main-area">{loading && !dashboard ? <div className="loading-screen"><LoaderCircle className="spin"/> Atualizando indicadores…</div> : error ? <div className="error-state"><CircleDollarSign/><h1>Não foi possível carregar o painel</h1><p>{error}</p><button className="button primary" onClick={() => void loadDashboard()}>Tentar novamente</button></div> : economicsOpen && dashboard ? <OfferEconomicsView products={dashboard.products} openProduct={openProduct}/> : selectedProduct ? detail ? <ProductView detail={detail} onBack={() => setSelectedProduct(null)}/> : <div className="loading-screen"><LoaderCircle className="spin"/> Carregando produto…</div> : dashboard ? <Dashboard data={dashboard} date={date} setDate={setDate} onOpen={openProduct} onSettings={() => setSettingsOpen(true)}/> : null}</div>{settingsOpen && dashboard && <AdminSheet products={dashboard.products} onClose={() => setSettingsOpen(false)} onSaved={() => void loadDashboard()}/>}</div>
