@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, ChevronRight, FlaskConical, Plus, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronRight, FlaskConical, Lightbulb, MousePointerClick, Plus, Sparkles, X } from 'lucide-react'
 import { demoBreakdown, demoTests } from '../data/demo'
 import { HistoricalImports } from './HistoricalImports'
 import { getOfferTests, getPerformanceBreakdown, saveOfferTest } from '../lib/api'
 import { money, number, productFinancials, roasTone, safeDivide } from '../lib/financials'
+import { diagnoseProduct } from '../lib/diagnostics'
 import type { InsightAlert, OfferTest, PerformanceBreakdown, ProductMetric } from '../types'
 
 const demoMode = import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === 'true'
@@ -17,6 +18,10 @@ function alertsFor(products: ProductMetric[]): InsightAlert[] {
     else if (insight.roas !== null && insight.roas <= 2) alerts.push({ id: `${product.id}-roas-watch`, productId: product.id, title: `${product.name}: ROAS em atenção`, detail: `ROAS de ${number(insight.roas, 2)}x. Mantenha orçamento controlado e itere o criativo.`, severity: 'watch' })
   })
   return alerts.slice(0, 3)
+}
+
+function OfferDiagnosis({ products, openProduct }: { products: ProductMetric[]; openProduct: (id: string) => void }) {
+  return <section className="diagnosis-section"><div className="section-heading"><div><span className="eyebrow">DIAGNÓSTICO DA OFERTA</span><h2>O que olhar primeiro</h2></div><span>Leitura para decisão, não só números</span></div><p className="diagnosis-intro">O Pulso cruza tráfego, checkout, vendas, taxas e sua meta de 30% de margem para indicar o próximo teste. Em amostras pequenas, trate como sinal — não como veredito.</p><div className="diagnosis-grid">{products.map((product) => { const diagnosis = diagnoseProduct(product); return <button className={`diagnosis-card diagnosis-${diagnosis.tone}`} key={product.id} onClick={() => openProduct(product.id)}><div className="diagnosis-card-head"><span className="diagnosis-icon">{diagnosis.tone === 'good' ? <CheckCircle2 size={18}/> : diagnosis.tone === 'neutral' ? <MousePointerClick size={18}/> : <AlertTriangle size={18}/>}</span><span className="diagnosis-status">{diagnosis.status}</span><ChevronRight size={18}/></div><h3>{product.name}</h3><strong>{diagnosis.title}</strong><p><b>O sinal:</b> {diagnosis.evidence}</p><div className="diagnosis-action"><Lightbulb size={15}/><span><b>Próxima ação:</b> {diagnosis.action}</span></div><small>{diagnosis.isEarlySignal ? 'Amostra curta: confirme o padrão com mais dados.' : diagnosis.lesson}</small></button> })}</div></section>
 }
 
 function TestForm({ products, close, saved }: { products: ProductMetric[]; close: () => void; saved: () => void }) {
@@ -62,5 +67,5 @@ function PerformanceBreakdownPanel({ date }: { date: string }) {
 
 export function Insights({ products, date, openProduct }: { products: ProductMetric[]; date: string; openProduct: (id: string) => void }) {
   const alerts = useMemo(() => alertsFor(products), [products])
-  return <><section className="alerts-section"><div className="section-heading"><div><span className="eyebrow">ATENÇÃO NECESSÁRIA</span><h2>Alertas acionáveis</h2></div><span>{alerts.length ? `${alerts.length} para revisar` : 'Tudo sob controle'}</span></div>{alerts.length ? <div className="alert-list">{alerts.map((alert) => <button className={`alert-card alert-${alert.severity}`} key={alert.id} onClick={() => openProduct(alert.productId)}>{alert.severity === 'risk' ? <AlertTriangle size={19}/> : <Sparkles size={19}/>}<div><strong>{alert.title}</strong><p>{alert.detail}</p></div><ChevronRight size={18}/></button>)}</div> : <div className="all-clear"><CheckCircle2 size={20}/><span>Nenhum alerta crítico para os produtos ativos neste período.</span></div>}</section><PerformanceBreakdownPanel date={date}/><HistoricalImports products={products}/><OfferTests products={products}/></>
+  return <><OfferDiagnosis products={products} openProduct={openProduct}/><section className="alerts-section"><div className="section-heading"><div><span className="eyebrow">ATENÇÃO NECESSÁRIA</span><h2>Alertas acionáveis</h2></div><span>{alerts.length ? `${alerts.length} para revisar` : 'Tudo sob controle'}</span></div>{alerts.length ? <div className="alert-list">{alerts.map((alert) => <button className={`alert-card alert-${alert.severity}`} key={alert.id} onClick={() => openProduct(alert.productId)}>{alert.severity === 'risk' ? <AlertTriangle size={19}/> : <Sparkles size={19}/>}<div><strong>{alert.title}</strong><p>{alert.detail}</p></div><ChevronRight size={18}/></button>)}</div> : <div className="all-clear"><CheckCircle2 size={20}/><span>Nenhum alerta crítico para os produtos ativos neste período.</span></div>}</section><PerformanceBreakdownPanel date={date}/><HistoricalImports products={products}/><OfferTests products={products}/></>
 }
