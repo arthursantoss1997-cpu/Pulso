@@ -125,7 +125,7 @@ export default function App() {
 
   const refreshIdentity = async () => {
     const callback = await handleAuthCallback()
-    if (callback?.type === 'invite') {
+    if (callback?.type === 'invite' && callback.token) {
       setInviteToken(callback.token)
       setAuthenticated(false)
     } else {
